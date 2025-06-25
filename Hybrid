@@ -1,0 +1,153 @@
+def load_vgg16():
+    vgg = applications.VGG16(
+        weights='imagenet',
+        include_top=False,
+        input_shape=(IMG_SIZE, IMG_SIZE, 3)
+    )
+    # Freeze all layers except the last 4
+    for layer in vgg.layers[:-4]:
+        layer.trainable = False
+    return vgg
+
+def load_vit_b16():
+    vit_model = vit.vit_b16(
+        image_size=IMG_SIZE,
+        activation='softmax',
+        pretrained=True,
+        include_top=False,
+        pretrained_top=False,
+        classes=NUM_CLASSES
+    )
+    # Freeze all layers except the last 4
+    for layer in vit_model.layers[:-4]:
+        layer.trainable = False
+    return vit_model
+
+# Hybrid Model Architecture
+def build_hybrid_model(vgg, vit_model):
+    # Input layer
+    input_layer = layers.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
+    
+    # VGG16 branch
+    vgg_output = vgg(input_layer)
+    vgg_output = layers.GlobalAveragePooling2D()(vgg_output)
+    vgg_output = layers.Dense(256, activation='relu')(vgg_output)
+    vgg_output = layers.Dropout(0.5)(vgg_output)
+    
+    # ViT branch
+    vit_output = vit_model(input_layer)
+    vit_output = layers.Dense(256, activation='relu')(vit_output)
+    vit_output = layers.Dropout(0.5)(vit_output)
+    
+    # Concatenate both branches
+    concatenated = layers.Concatenate()([vgg_output, vit_output])
+    
+    # Additional layers
+    x = layers.Dense(512, activation='relu')(concatenated)
+    x = layers.Dropout(0.5)(x)
+    x = layers.Dense(256, activation='relu')(x)
+    x = layers.Dropout(0.3)(x)
+    
+    # Output layer
+    output_layer = layers.Dense(NUM_CLASSES, activation='softmax')(x)
+    
+    # Create model
+    model = models.Model(inputs=input_layer, outputs=output_layer)
+    
+    return model
+
+# Load pre-trained models
+vgg = load_vgg16()
+vit_model = load_vit_b16()
+
+# Build hybrid model
+hybrid_model = build_hybrid_model(vgg, vit_model)
+
+# Compile the model
+hybrid_model.compile(
+    optimizer=optimizers.Adam(learning_rate=LEARNING_RATE),
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+# Callbacks
+callbacks = [
+    ModelCheckpoint(
+        'best_hybrid_model.h5',
+        monitor='val_accuracy',
+        save_best_only=True,
+        mode='max'
+    ),
+    EarlyStopping(
+        monitor='val_loss',
+        patience=10,
+        restore_best_weights=True
+    ),
+    ReduceLROnPlateau(
+        monitor='val_loss',
+        factor=0.2,
+        patience=5,
+        min_lr=1e-7
+    )
+]
+
+# Train the model
+history = hybrid_model.fit(
+    train_generator,
+    steps_per_epoch=train_generator.samples // BATCH_SIZE,
+    validation_data=val_generator,
+    validation_steps=val_generator.samples // BATCH_SIZE,
+    epochs=EPOCHS,
+    callbacks=callbacks
+)
+
+# Evaluate the model
+test_loss, test_acc = hybrid_model.evaluate(test_generator)
+print(f"Test Accuracy: {test_acc*100:.2f}%")
+
+# Plot training history
+def plot_history(history):
+    plt.figure(figsize=(12, 4))
+    
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['accuracy'], label='Train Accuracy')
+    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+    plt.title('Accuracy over epochs')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['loss'], label='Train Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.title('Loss over epochs')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.show()
+
+plot_history(history)
+
+# Generate predictions
+y_pred = hybrid_model.predict(test_generator)
+y_pred = np.argmax(y_pred, axis=1)
+y_true = test_generator.classes
+
+# Classification report
+class_names = list(test_generator.class_indices.keys())
+print("Classification Report:")
+print(classification_report(y_true, y_pred, target_names=class_names))
+
+# Confusion matrix
+def plot_confusion_matrix(y_true, y_pred, classes):
+    cm = confusion_matrix(y_true, y_pred)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=classes, yticklabels=classes)
+    plt.title('Confusion Matrix')
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
+    plt.show()
+
+plot_confusion_matrix(y_true, y_pred, class_names)

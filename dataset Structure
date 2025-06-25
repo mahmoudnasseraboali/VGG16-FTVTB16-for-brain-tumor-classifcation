@@ -1,0 +1,11 @@
+dataset_path/
+    Training/
+        glioma/
+        meningioma/
+        pituitary/
+        notumor/
+    Testing/
+        glioma/
+        meningioma/
+        pituitary/
+        notumor/
