@@ -21,7 +21,7 @@ ing a robust,interpretable solution aligned with clinical workflows. These findi
 # Dataset
 
   The Kaggle database website is the
- open-access dataset used in this study [27]. Gliomas, meningiomas, pituitary, and no tumor
+ open-access dataset used in this study Gliomas, meningiomas, pituitary, and no tumor
  are four distinct groups into which the 7,023 images captured by MRI of the human brain
  are classified. This dataset’s main goal is to help researchers create a highly accurate model
  for detect and classify brain tumors.Demographic representation of the kaggle dataset
